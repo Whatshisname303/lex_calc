@@ -1,32 +1,38 @@
 use std::io::{self, stdin, stdout, Write};
-use tokens::Token;
+use std::collections::HashMap;
 
 mod tokens;
+mod tree_builder;
+
+struct Environment {
+    // user_vars: HashMap<String, MathType>,
+    user_functions: HashMap<String, i32>, // need to define actual function type at some point
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self {
+            // user_vars: HashMap::new(),
+            user_functions: HashMap::new(),
+        }
+    }
+}
 
 fn main() {
     let mut executions = 0;
     let mut user_input = String::new();
+
+    let mut environment = Environment::default();
+
     loop {
         match get_input(&mut user_input) {
             Ok(()) => {
-                match tokens::generate_tokens(&user_input) {
-                    Ok(tokens) => {
-                        for token in tokens {
-                            match token {
-                                Token::Operator(operator) => {
-                                    print!("op:'{:?}' ", operator);
-                                },
-                                Token::Text(text) => {
-                                    print!("text:'{text}' ");
-                                },
-                            };
-                        }
-                        println!("-- Parsed token output")
-                    },
-                    Err(e) => {
-                        println!("Fucked up token generation: {:?}", e);
-                    }
-                }
+                let tokens = tokens::generate_tokens(&user_input);
+                let expression_tree = tree_builder::build_expression_tree(tokens);
+                match expression_tree {
+                    Ok(node) => println!("{:?}", node),
+                    Err(e) => println!("{:?}", e),
+                };
             },
             Err(e) => {
                 println!("Couldn't read input: {e}");
