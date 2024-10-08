@@ -1,40 +1,25 @@
-use crate::tokens::Token;
+use std::error::Error;
+use std::fmt;
 
-// pub enum MathType {
-//     Number(i128),
-//     Vector(Vec<i128>),
-//     Matrix(Vec<Vec<i128>>),
-// }
-
-// const TOKEN_MAP: [(&str, Operator); 21] = [
-//     ("=", Operator::Assignment),
-//     ("+", Operator::Plus),
-//     ("-", Operator::Minus),
-//     ("*", Operator::Mult),
-//     ("/", Operator::Div),
-//     ("^", Operator::Pow),
-//     ("&", Operator::Addr),
-//     (">", Operator::Gt),
-//     (">=", Operator::Ge),
-//     ("<", Operator::Lt),
-//     ("<=", Operator::Le),
-//     (".", Operator::Dot),
-//     (",", Operator::Comma),
-//     ("(", Operator::ParenOpen),
-//     (")", Operator::ParenClose),
-//     ("[", Operator::BracketOpen),
-//     ("]", Operator::BracketClose),
-//     ("{", Operator::CurlyOpen),
-//     ("}", Operator::CurlyClose),
-//     ("->", Operator::ArrowRight),
-//     ("$&", Operator::Wacky),
-// ];
+use crate::{tokens::Token, Environment, TrigMode};
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum ExpressionBuildError {
-    NoClosingBrace
+    NoClosingBrace,
+    InvalidMode(String),
 }
+
+impl fmt::Display for ExpressionBuildError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExpressionBuildError::NoClosingBrace => write!(f, "missing closing ')'"),
+            ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
+        }
+    }
+}
+
+impl Error for ExpressionBuildError {}
 
 #[derive(Debug)]
 pub enum Node {
@@ -42,9 +27,6 @@ pub enum Node {
     Exp(Vec<Node>),
 }
 
-// loop through subnodes
-// if closing closing brace, pull inner nodes into expression and return
-// if opening brace, recurse into next layer
 fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildError> {
     let mut i = 0;
     while i < nodes.len() {
@@ -78,42 +60,70 @@ fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildE
     Ok(nodes)
 }
 
-
-// fn build_brace_tree(node: &mut Node) -> Result<(), ExpressionBuildError> {
-//     if let Node::Exp(subnodes) = node {
-//         let open_brace = subnodes.iter().position(|node| match node {
-//             Node::Tkn(token) => token == "(",
-//             Node::Exp(_) => false,
-//         });
-//         if let Some(open_index) = open_brace {
-//             let close_brace = subnodes.iter().rev().position(|node| match node {
-//                 Node::Tkn(token) => token == ")",
-//                 Node::Exp(_) => false,
-//             });
-//             match close_brace {
-//                 None => return Err(ExpressionBuildError::NoClosingBrace),
-//                 Some(close_index) => {
-//                     let close_index = subnodes.len() - 1 - close_index; // adjust for rev()
-//                     println!("Pulling parentheses at {} and {}", open_index, close_index);
-//                     if open_index > close_index {
-//                         return Err(ExpressionBuildError::NoClosingBrace);
-//                     }
-//                     let mut enclosed_nodes: Vec<_> = subnodes.drain(open_index..=close_index).skip(1).collect();
-//                     enclosed_nodes.pop(); // skip and pop to remove parentheses
-//                     let mut new_expression = Node::Exp(enclosed_nodes);
-//                     build_brace_tree(&mut new_expression)?;
-//                     subnodes.insert(open_index, new_expression);
-//                 },
-//             };
-//         }
-//     }
-//     Ok(())
-// }
-
+// todo: remove mode update tokens from node list
+// todo: allow temporary mode updates if tokens continue past mode update
+pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environment) -> Result<String, ExpressionBuildError> {
+    match token_sequence.get(0) {
+        Some(token) => match token.as_str() {
+            "clear" => {
+                token_sequence.clear();
+                Ok(String::from("clear"))
+            },
+            "mode" => match token_sequence.get(1) {
+                Some(token) => match token.as_str() {
+                    "rad" => {
+                        environment.trig_mode = TrigMode::Rad;
+                        token_sequence.drain(..2);
+                        Ok(String::from("set mode to radians"))
+                    },
+                    "deg" => {
+                        environment.trig_mode = TrigMode::Deg;
+                        token_sequence.drain(..2);
+                        Ok(String::from("set mode to degrees"))
+                    },
+                    "digits" => match token_sequence.get(2) {
+                        Some(token) => match token.parse::<u8>() {
+                            Ok(digit) => {
+                                environment.digit_cap = digit;
+                                token_sequence.drain(..3);
+                                Ok(format!("set display digits to {digit} digits"))
+                            },
+                            Err(_) => Err(ExpressionBuildError::InvalidMode(format!("could not parse digit, got '{}'", token)))
+                        },
+                        None => Err(ExpressionBuildError::InvalidMode(format!("must provide number of digits to display")))
+                    }
+                    _ => Err(ExpressionBuildError::InvalidMode(format!("no option to change mode '{}'", token)))
+                }
+                None => {
+                    let vars: String = environment.user_vars
+                        .iter()
+                        .map(|(name, value)| format!("{:?} = {:?}\n", name, value))
+                        .collect(); // todo: chain user functions if they don't end up merged into vars
+                    Ok(format!("display digits: {}\ntrig mode: {:?}\nvars:\n{}", environment.digit_cap, environment.trig_mode, vars))
+                }
+            },
+            "newvars" => {
+                let default_env = Environment::default();
+                environment.user_vars = default_env.user_vars;
+                environment.user_functions = default_env.user_functions;
+                token_sequence.clear();
+                Ok(String::from("cleared vars"))
+            },
+            "quit" | "exit" | "q" => {
+                Ok(String::from("exit"))
+            }
+            _ => Ok(String::new()),
+        },
+        None => Ok(String::new()),
+    }
+}
 
 pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, ExpressionBuildError> {
     let nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
     let nodes = parse_tree_braces(nodes)?;
+    // parse functions
+    // parse operators
+    // execute
     // TODO: mutate root expression going through full order of operations
     Ok(Node::Exp(nodes))
 }
