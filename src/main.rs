@@ -58,7 +58,9 @@ fn execute_line(line: &mut String, environment: &mut Environment) -> Result<(), 
     };
     let expression_tree = tree_builder::build_expression_tree(tokens);
     match expression_tree {
-        Ok(node) => println!("{:?}", node),
+        Ok(node) => {
+            println!("{}", node);
+        },
         Err(e) => println!("{:?}", e),
     };
     Ok(())

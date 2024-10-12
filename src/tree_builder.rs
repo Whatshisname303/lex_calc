@@ -3,11 +3,21 @@ use std::fmt;
 
 use crate::{tokens::Token, Environment, TrigMode};
 
+const UNARY_OPERATORS: &'static [&'static str] = &["-", "&", "!"];
+const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
+    &["^"],
+    &["*", "/", "//"],
+    &["+", "-"],
+    &[","],
+    &["->"],
+];
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum ExpressionBuildError {
     NoClosingBrace,
     InvalidMode(String),
+    FloatingOperator(String),
 }
 
 impl fmt::Display for ExpressionBuildError {
@@ -15,6 +25,7 @@ impl fmt::Display for ExpressionBuildError {
         match self {
             ExpressionBuildError::NoClosingBrace => write!(f, "missing closing ')'"),
             ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
+            ExpressionBuildError::FloatingOperator(e) => write!(f, "floating operator '{e}'"),
         }
     }
 }
@@ -25,6 +36,56 @@ impl Error for ExpressionBuildError {}
 pub enum Node {
     Tkn(Token),
     Exp(Vec<Node>),
+}
+
+impl Node {
+    fn is_operator(&self) -> bool {
+        self.is_unary_operator() || self.is_binary_operator()
+    }
+    fn is_unary_operator(&self) -> bool {
+        match self {
+            Node::Exp(_) => false,
+            Node::Tkn(token) => {
+                UNARY_OPERATORS.contains(&token.as_str())
+            }
+        }
+    }
+    fn is_binary_operator(&self) -> bool {
+        match self {
+            Node::Exp(_) => false,
+            Node::Tkn(token) => BINARY_OPERATOR_PRIORITY.iter().any(|prio| prio.contains(&token.as_str())),
+        }
+    }
+    fn pretty_string(&self, depth: usize) -> String {
+        let mut res = String::new();
+
+        for _ in 0..depth {
+            res.push_str("\t");
+        }
+
+        match self {
+            Node::Tkn(token) => {
+                res.push_str(format!("'{}',\n", token).as_str());
+            },
+            Node::Exp(subnodes) => {
+                res.push_str("[\n");
+                for node in subnodes {
+                    res.push_str(node.pretty_string(depth + 1).as_str());
+                }
+                for _ in 0..depth {
+                    res.push_str("\t");
+                }
+                res.push_str("]\n");
+            },
+        }
+        res
+    }
+}
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.pretty_string(0))
+    }
 }
 
 fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildError> {
@@ -60,7 +121,54 @@ fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildE
     Ok(nodes)
 }
 
-// todo: remove mode update tokens from node list
+
+fn fill_missing_ans(nodes: &mut Vec<Node>) {
+    match nodes.get(0) {
+        Some(node) => {
+            if node.is_binary_operator() {
+                nodes.insert(0, Node::Tkn(Token::from("ans")));
+            }
+        },
+        None => {}
+    };
+}
+
+fn parse_functions(nodes: &mut Vec<Node>) {
+    let mut i = 1;
+    while i < nodes.len() - 1 {
+        let current = &nodes[i];
+        let next = &nodes[i + 1];
+        if !current.is_operator() && !next.is_operator() {
+            let mut function_nodes: Vec<Node> = nodes.drain(i..i+1).collect();
+            parse_functions(&mut function_nodes);
+            nodes.insert(i, Node::Exp(function_nodes));
+        }
+        i += 1;
+    }
+}
+
+fn parse_unary(nodes: &mut Vec<Node>) {
+    let mut i = 0;
+    while i < nodes.len() - 1 {
+        match nodes[i] {
+            Node::Tkn(_) => {
+                if nodes[i].is_unary_operator() && (i == 0 || nodes[i - 1].is_operator()) {
+                    let unary_nodes: Vec<Node> = nodes.drain(i..=(i + 1)).collect();
+                    nodes.insert(i, Node::Exp(unary_nodes));
+                }
+            },
+            Node::Exp(ref mut subnodes) => {
+                parse_unary(subnodes);
+            },
+        };
+        i += 1;
+    }
+}
+
+fn parse_binary(nodes: &mut Vec<Node>) {
+    // todo
+}
+
 // todo: allow temporary mode updates if tokens continue past mode update
 pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environment) -> Result<String, ExpressionBuildError> {
     match token_sequence.get(0) {
@@ -119,11 +227,11 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
 }
 
 pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, ExpressionBuildError> {
-    let nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
-    let nodes = parse_tree_braces(nodes)?;
-    // parse functions
-    // parse operators
-    // execute
-    // TODO: mutate root expression going through full order of operations
+    let mut nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
+    nodes = parse_tree_braces(nodes)?;
+    fill_missing_ans(&mut nodes);
+    parse_functions(&mut nodes);
+    parse_unary(&mut nodes);
+    parse_binary(&mut nodes);
     Ok(Node::Exp(nodes))
 }
