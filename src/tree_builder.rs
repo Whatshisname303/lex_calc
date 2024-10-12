@@ -1,7 +1,10 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::{tokens::Token, Environment, TrigMode};
+use crate::{
+    tokens::Token,
+    executor::{Environment, TrigMode},
+};
 
 const UNARY_OPERATORS: &'static [&'static str] = &["-", "&", "!"];
 const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
@@ -38,10 +41,10 @@ pub enum Node {
 }
 
 impl Node {
-    fn is_operator(&self) -> bool {
+    pub fn is_operator(&self) -> bool {
         self.is_unary_operator() || self.is_binary_operator()
     }
-    fn is_unary_operator(&self) -> bool {
+    pub fn is_unary_operator(&self) -> bool {
         match self {
             Node::Exp(_) => false,
             Node::Tkn(token) => {
@@ -49,7 +52,7 @@ impl Node {
             }
         }
     }
-    fn is_binary_operator(&self) -> bool {
+    pub fn is_binary_operator(&self) -> bool {
         match self {
             Node::Exp(_) => false,
             Node::Tkn(token) => BINARY_OPERATOR_PRIORITY.iter().any(|prio| prio.contains(&token.as_str())),
@@ -175,7 +178,6 @@ fn parse_binary(nodes: &mut Vec<Node>) {
                 Node::Tkn(ref token) => {
                     if ops.contains(&token.as_str()) {
                         let binary_nodes: Vec<Node> = nodes.drain(i-1..=i+1).collect();
-                        println!("Kicking out nodes: {:?}", binary_nodes);
                         nodes.insert(i - 1, Node::Exp(binary_nodes));
                     }
                 }
