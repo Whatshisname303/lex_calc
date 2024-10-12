@@ -8,8 +8,7 @@ const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
     &["^"],
     &["*", "/", "//"],
     &["+", "-"],
-    &[","],
-    &["->"],
+    &["=>", "="],
 ];
 
 #[allow(dead_code)]
@@ -166,7 +165,24 @@ fn parse_unary(nodes: &mut Vec<Node>) {
 }
 
 fn parse_binary(nodes: &mut Vec<Node>) {
-    // todo
+    for ops in BINARY_OPERATOR_PRIORITY {
+        let mut i = 1;
+        while i < nodes.len() - 1 {
+            match nodes[i] {
+                Node::Exp(ref mut subnodes) => {
+                    parse_binary(subnodes);
+                },
+                Node::Tkn(ref token) => {
+                    if ops.contains(&token.as_str()) {
+                        let binary_nodes: Vec<Node> = nodes.drain(i-1..=i+1).collect();
+                        println!("Kicking out nodes: {:?}", binary_nodes);
+                        nodes.insert(i - 1, Node::Exp(binary_nodes));
+                    }
+                }
+            };
+            i += 1;
+        }
+    }
 }
 
 // todo: allow temporary mode updates if tokens continue past mode update
@@ -210,7 +226,7 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
                     Ok(format!("display digits: {}\ntrig mode: {:?}\nvars:\n{}", environment.digit_cap, environment.trig_mode, vars))
                 }
             },
-            "newvars" => {
+            "clearvars" => {
                 let default_env = Environment::default();
                 environment.user_vars = default_env.user_vars;
                 environment.user_functions = default_env.user_functions;

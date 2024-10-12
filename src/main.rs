@@ -38,6 +38,7 @@ impl Default for Environment {
                 ("PI".to_string(), MathType::Number(consts::PI as Number)),
                 ("e".to_string(), MathType::Number(consts::E as Number)),
                 ("E".to_string(), MathType::Number(consts::E as Number)),
+                ("ans".to_string(), MathType::Number(0 as Number)),
             ]),
             user_functions: HashMap::new(),
             trig_mode: TrigMode::Deg,
