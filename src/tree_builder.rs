@@ -58,6 +58,22 @@ impl Node {
             Node::Tkn(token) => BINARY_OPERATOR_PRIORITY.iter().any(|prio| prio.contains(&token.as_str())),
         }
     }
+    // other is_..._operator functions should also return option rather than bool, but idc rn
+    pub fn as_assignment_operator(&self) -> Option<&String> {
+        match self {
+            Node::Exp(_) => None,
+            Node::Tkn(token) => match token.as_str() {
+                "=" | "=>" => Some(token),
+                _ => None,
+            },
+        }
+    }
+    pub fn as_identifier(&self) -> Option<&String> {
+        match self {
+            Node::Exp(_) => None,
+            Node::Tkn(token) => Some(token),
+        }
+    }
     fn pretty_string(&self, depth: usize) -> String {
         let mut res = String::new();
 
