@@ -153,7 +153,7 @@ fn fill_missing_ans(nodes: &mut Vec<Node>) {
 
 fn parse_functions(nodes: &mut Vec<Node>) {
     let mut i = 1;
-    while i < nodes.len() - 1 {
+    while (i as isize) < (nodes.len() as isize) - 1 {
         let current = &nodes[i];
         let next = &nodes[i + 1];
         if !current.is_operator() && !next.is_operator() {
@@ -163,11 +163,12 @@ fn parse_functions(nodes: &mut Vec<Node>) {
         }
         i += 1;
     }
+    println!("Finished functions");
 }
 
 fn parse_unary(nodes: &mut Vec<Node>) {
     let mut i = 0;
-    while i < nodes.len() - 1 {
+    while (i as isize) < (nodes.len() as isize) - 1 {
         match nodes[i] {
             Node::Tkn(_) => {
                 if nodes[i].is_unary_operator() && (i == 0 || nodes[i - 1].is_operator()) {
@@ -186,7 +187,7 @@ fn parse_unary(nodes: &mut Vec<Node>) {
 fn parse_binary(nodes: &mut Vec<Node>) {
     for ops in BINARY_OPERATOR_PRIORITY {
         let mut i = 1;
-        while i < nodes.len() - 1 {
+        while (i as isize) < (nodes.len() as isize) - 1 {
             match nodes[i] {
                 Node::Exp(ref mut subnodes) => {
                     parse_binary(subnodes);

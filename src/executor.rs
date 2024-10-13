@@ -171,6 +171,7 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
         },
         Node::Exp(subnodes) => {
             match subnodes.len() {
+                0 => Ok(MathType::Number(0.0)),
                 1 => {
                     execute_expression_tree(&subnodes[0], environment)
                 },
