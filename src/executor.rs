@@ -80,7 +80,23 @@ impl MathType {
                 Ok(MathType::Number(1.0)) // todo
             },
             "*" => {
-                Ok(MathType::Number(1.0)) // todo
+                match self {
+                    MathType::Number(lhs) => match rhs {
+                        MathType::Number(rhs) => Ok(MathType::Number(lhs * rhs)),
+                        MathType::Vector(rhs) => Ok(MathType::Vector(rhs.iter().map(|v| v * lhs).collect())),
+                        MathType::Matrix(_rhs) => todo!(),
+                    },
+                    MathType::Vector(lhs) => match rhs {
+                        MathType::Number(rhs) => Ok(MathType::Vector(lhs.iter().map(|v| v * rhs).collect())),
+                        MathType::Vector(_) => Err(ExecutionError::InvalidOperation("attempted invalid vec * number".to_string())),
+                        MathType::Matrix(_rhs) => todo!(),
+                    },
+                    MathType::Matrix(_lhs) => match rhs {
+                        MathType::Number(_rhs) => todo!(),
+                        MathType::Vector(_rhs) => todo!(),
+                        MathType::Matrix(_rhs) => todo!(),
+                    }
+                }
             },
             "/" => {
                 Ok(MathType::Number(1.0)) // todo
