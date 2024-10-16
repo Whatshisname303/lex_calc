@@ -56,8 +56,14 @@ impl Default for Environment {
 impl MathType {
     fn operate(&self, operator: &str, rhs: MathType) -> Result<MathType, ExecutionError> {
         match operator {
-            "^" => {
-                Ok(MathType::Number(1.0)) // todo
+            "^" => match self {
+                MathType::Number(lhs) => match rhs {
+                    MathType::Number(rhs) => Ok(MathType::Number(lhs.powf(rhs))),
+                    MathType::Vector(_rhs) => todo!(), // there might be some weird way to do this
+                    MathType::Matrix(_rhs) => todo!(),
+                },
+                MathType::Vector(_lhs) => todo!(),
+                MathType::Matrix(_lhs) => todo!(),
             },
             "+" => match self {
                 MathType::Number(lhs) => match rhs {
