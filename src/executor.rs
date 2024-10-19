@@ -10,6 +10,8 @@ pub enum ExecutionError {
     UnknownExpression(String),
     UnknownIdentifier(String),
     InvalidOperation(String),
+    InvalidVectorContents(String),
+    MatrixUnequalRowLengths,
 }
 
 pub type Number = f64;
@@ -210,6 +212,43 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
             }
         },
         Node::Exp(subnodes) => {
+            if let Some(first) = subnodes.get(0) {
+                if first.is_char('[') {
+                    let mut vectors: Vec<Vec<Number>> = Vec::new();
+                    let mut col = 1;
+
+                    for node in subnodes.iter().skip(1) {
+                        if node.is_char(',') || node.is_char(']') {
+                            continue;
+                        } else if node.is_char(';') {
+                            col = 0;
+                        } else {
+                            let element = execute_expression_tree(node, environment)?;
+                            match element {
+                                MathType::Number(num) => match vectors.get_mut(col) {
+                                    Some(vector) => vector.push(num),
+                                    None => vectors.push(vec![num]),
+                                },
+                                _ => return Err(ExecutionError::InvalidVectorContents(element.to_string())),
+                            }
+                            col += 1;
+                        }
+                    }
+
+                    let height = vectors.get(0).map(|v| v.len()).unwrap_or(0);
+                    if vectors.iter().any(|vector| vector.len() != height) {
+                        return Err(ExecutionError::MatrixUnequalRowLengths);
+                    }
+
+                    if vectors.len() == 0 {
+                        return Ok(MathType::Vector(Vec::new()));
+                    } else if vectors.len() == 1 {
+                        return Ok(MathType::Vector(vectors.remove(0)));
+                    } else {
+                        return Ok(MathType::Matrix(vectors));
+                    }
+                }
+            }
             match subnodes.len() {
                 0 => Ok(MathType::Number(0.0)),
                 1 => {

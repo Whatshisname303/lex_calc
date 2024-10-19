@@ -17,7 +17,7 @@ const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum ExpressionBuildError {
-    NoClosingBrace,
+    HangingBrace(String),
     InvalidMode(String),
     FloatingOperator(String),
 }
@@ -25,7 +25,7 @@ pub enum ExpressionBuildError {
 impl fmt::Display for ExpressionBuildError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExpressionBuildError::NoClosingBrace => write!(f, "missing closing ')'"),
+            ExpressionBuildError::HangingBrace(e) => write!(f, "missing closing {}", e),
             ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
             ExpressionBuildError::FloatingOperator(e) => write!(f, "floating operator '{e}'"),
         }
@@ -56,6 +56,12 @@ impl Node {
         match self {
             Node::Exp(_) => false,
             Node::Tkn(token) => BINARY_OPERATOR_PRIORITY.iter().any(|prio| prio.contains(&token.as_str())),
+        }
+    }
+    pub fn is_char(&self, c: char) -> bool {
+        match self {
+            Node::Exp(_) => false,
+            Node::Tkn(token) => token == &c.to_string(),
         }
     }
     // other is_..._operator functions should also return option rather than bool, but idc rn
@@ -114,6 +120,30 @@ impl fmt::Display for Node {
     }
 }
 
+// --------------------------------------------------------------------------------------------------------------------
+
+fn parse_square_braces(nodes: &mut Vec<Node>) -> Result<(), ExpressionBuildError> {
+    let mut i = 0;
+    while i < nodes.len() {
+        if nodes[i].is_char('[') {
+            let mut j = i;
+            loop {
+                j += 1;
+                if j >= nodes.len() {
+                    return Err(ExpressionBuildError::HangingBrace("]".to_string()));
+                }
+                if nodes[j].is_char(']') {
+                    break;
+                }
+            };
+            let subnodes: Vec<Node> = nodes.drain(i..=j).collect();
+            nodes.insert(i, Node::Exp(subnodes));
+        };
+        i += 1;
+    }
+    Ok(())
+}
+
 fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildError> {
     let mut i = 0;
     while i < nodes.len() {
@@ -146,7 +176,6 @@ fn parse_tree_braces(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildE
     }
     Ok(nodes)
 }
-
 
 fn fill_missing_ans(nodes: &mut Vec<Node>) {
     match nodes.get(0) {
@@ -271,6 +300,7 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
 
 pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, ExpressionBuildError> {
     let mut nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
+    parse_square_braces(&mut nodes)?;
     nodes = parse_tree_braces(nodes)?;
     fill_missing_ans(&mut nodes);
     parse_functions(&mut nodes);
