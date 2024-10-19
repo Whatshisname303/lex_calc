@@ -35,7 +35,6 @@ fn execute_line(line: &mut String, environment: &mut executor::Environment) -> R
 }
 
 fn main() {
-    let mut executions = 0;
     let mut user_input = String::new();
 
     let mut environment = executor::Environment::default();
@@ -47,11 +46,6 @@ fn main() {
         }
 
         user_input.clear();
-
-        executions += 1;
-        if executions > 10 {
-            break;
-        }
     }
 }
 

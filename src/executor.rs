@@ -5,9 +5,8 @@ use crate::tree_builder::Node;
 
 #[derive(Debug)]
 pub enum ExecutionError {
-    UnexpectedExpressionLength(usize),
     UnknownOperator(String),
-    UnknownExpression(usize),
+    UnknownExpression(String),
     UnknownIdentifier(String),
     InvalidOperation(String),
 }
@@ -163,7 +162,6 @@ fn handle_assignment(lhs: &Node, rhs: &Node, operator: &str, environment: &mut E
     Ok(value)
 }
 
-// todo: fix the error handling, this is complete garbage
 pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) -> Result<MathType, ExecutionError> {
     match root_node {
         Node::Tkn(token) => {
@@ -195,7 +193,7 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
                             Err(ExecutionError::UnknownIdentifier(token.clone()))
                         }
                     } else {
-                        Err(ExecutionError::UnknownExpression(2))
+                        Err(ExecutionError::UnknownExpression(format!("left: {}; right: {};", left_node.flat_string(), right_node.flat_string())))
                     }
                 },
                 3 => {
@@ -207,11 +205,11 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
                         let rhs = execute_expression_tree(&subnodes[2], environment)?;
                         lhs.operate(&op, rhs)
                     } else {
-                        Err(ExecutionError::UnknownExpression(3))
+                        Err(ExecutionError::UnknownExpression(format!("lhs: {}; op: {}; rhs: {}", subnodes[0].flat_string(), operator.flat_string(), subnodes[1].flat_string())))
                     }
                 },
                 _ => {
-                    Err(ExecutionError::UnexpectedExpressionLength(subnodes.len()))
+                    Err(ExecutionError::UnknownExpression(String::from_iter(subnodes.iter().map(|node| node.flat_string()))))
                 },
             }
         }

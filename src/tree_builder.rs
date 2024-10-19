@@ -74,6 +74,14 @@ impl Node {
             Node::Tkn(token) => Some(token),
         }
     }
+    pub fn flat_string(&self) -> String {
+        let mut res = String::new();
+        match self {
+            Node::Tkn(token) => res += &format!("'{}', ", token),
+            Node::Exp(subnodes) => subnodes.iter().for_each(|node| res += &node.flat_string()),
+        }
+        res
+    }
     fn pretty_string(&self, depth: usize) -> String {
         let mut res = String::new();
 
@@ -163,7 +171,6 @@ fn parse_functions(nodes: &mut Vec<Node>) {
         }
         i += 1;
     }
-    println!("Finished functions");
 }
 
 fn parse_unary(nodes: &mut Vec<Node>) {
@@ -238,6 +245,7 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
                     _ => Err(ExpressionBuildError::InvalidMode(format!("no option to change mode '{}'", token)))
                 }
                 None => {
+                    token_sequence.remove(0);
                     let vars: String = environment.user_vars
                         .iter()
                         .map(|(name, value)| format!("{:?} = {:?}\n", name, value))
