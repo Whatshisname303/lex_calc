@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::f64::consts;
+use std::fmt;
 
 use crate::tree_builder::Node;
 
@@ -18,6 +19,41 @@ pub enum MathType {
     Number(Number),
     Vector(Vec<Number>),
     Matrix(Vec<Vec<Number>>),
+}
+
+impl fmt::Display for MathType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MathType::Number(number) => write!(f, "{}", number),
+            MathType::Vector(vector) => {
+                write!(f, "[")?;
+                if let Some(first) = vector.get(0) {
+                    write!(f, "{}", first)?
+                }
+                for number in vector.iter().skip(1) {
+                    write!(f, ", {}", number)?;
+                }
+                write!(f, "]")
+            },
+            MathType::Matrix(matrix) => {
+                let width = matrix.len();
+                let height = matrix.get(0).map(|r| r.len()).unwrap_or(0);
+                write!(f, "[\n")?;
+                let mut row = 0;
+                while row < height {
+                    write!(f, "\t")?;
+                    let mut col = 0;
+                    while col < width {
+                        write!(f, "{}, ", matrix[col][row])?;
+                        col += 1;
+                    }
+                    write!(f, "\n")?;
+                    row += 1;
+                }
+                write!(f, "]\n")
+            },
+        }
+    }
 }
 
 

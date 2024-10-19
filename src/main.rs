@@ -23,7 +23,7 @@ fn execute_line(line: &mut String, environment: &mut executor::Environment) -> R
         Ok(nodes) => {
             match executor::execute_expression_tree(&nodes, environment) {
                 Ok(value) => {
-                    println!("Execution returned: {:?}", value);
+                    println!("{}\n", value);
                     environment.user_vars.insert("ans".to_string(), value);
                 },
                 Err(e) => println!("{:?}", e),
