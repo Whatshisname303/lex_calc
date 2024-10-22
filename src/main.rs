@@ -8,15 +8,26 @@ mod executor;
 
 fn execute_line(line: &mut String, environment: &mut executor::Environment) -> Result<(), Box<dyn Error>> {
     get_input(line)?;
-    let mut tokens = tokens::generate_tokens(line);
 
+    let mut tokens = tokens::generate_tokens(line);
     let command_response = tree_builder::parse_commands(&mut tokens, environment)?;
-    match command_response.as_str() {
-        "clear" => {}, // todo: clear terminal
+
+    let processed = match command_response.as_str() {
+        "clear" => true, // todo: clear terminal
         "exit" => process::exit(0),
-        "" => {},
-        _ => println!("{}", command_response),
+        "new function" => {
+            println!("new function");
+            true
+        },
+        "" => false,
+        _ => {
+            println!("{}", command_response);
+            true
+        },
     };
+    if processed {
+        return Ok(());
+    }
 
     let expression_tree = tree_builder::build_expression_tree(tokens);
     match expression_tree {

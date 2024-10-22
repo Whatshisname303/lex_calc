@@ -18,6 +18,7 @@ const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
 pub enum ExpressionBuildError {
     HangingBrace(String),
     InvalidMode(String),
+    InvalidFunctionDefinition(String),
 }
 
 impl fmt::Display for ExpressionBuildError {
@@ -25,6 +26,7 @@ impl fmt::Display for ExpressionBuildError {
         match self {
             ExpressionBuildError::HangingBrace(e) => write!(f, "missing closing {}", e),
             ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
+            ExpressionBuildError::InvalidFunctionDefinition(e) => write!(f, "invalid function definition: {e}"),
         }
     }
 }
@@ -195,15 +197,15 @@ fn fill_missing_ans(nodes: &mut Vec<Node>) {
 }
 
 fn parse_functions(nodes: &mut Vec<Node>) {
-    let mut i = 1;
+    let mut i = 0;
     while (i as isize) < (nodes.len() as isize) - 1 {
         let current = &nodes[i].unrolled();
         let next = &nodes[i + 1].unrolled();
         if !current.is_operator() && !next.is_operator() {
-            println!("Found function to eval");
-            let mut function_nodes: Vec<Node> = nodes.drain(i..=i+1).collect();
-            parse_functions(&mut function_nodes);
-            nodes.insert(i, Node::Exp(function_nodes));
+            let function_name = nodes.remove(i);
+            let mut function_args = vec![nodes.remove(i)];
+            parse_functions(&mut function_args);
+            nodes.insert(i, Node::Exp(vec![function_name, function_args.remove(0)]));
         }
         i += 1;
     }
@@ -288,7 +290,7 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
                         .collect();
                     let functions: String = environment.user_functions
                         .iter()
-                        .map(|(name, nodes)| format!("function {} = {}\n", name, Node::Exp(nodes.clone()).flat_string()))
+                        .map(|(name, _)| format!("function: {}()\n", name)) // could show some more info later
                         .collect();
                     Ok(format!("display digits: {}\ntrig mode: {:?}\nvars:\n{}\nfunctions:\n{}", environment.digit_cap, environment.trig_mode, vars, functions))
                 }
@@ -302,22 +304,46 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
             },
             "quit" | "exit" | "q" => {
                 Ok(String::from("exit"))
-            }
+            },
+            "def" => { // first node is "def", second expects name, third params, fourth+ body
+                token_sequence.remove(0);
+                let name = match token_sequence.get(0) {
+                    Some(_) => token_sequence.remove(0),
+                    None => return Err(ExpressionBuildError::InvalidFunctionDefinition("empty function definition".to_string())),
+                };
+
+                let mut function_nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
+                function_nodes = parse_tree_braces(function_nodes)?;
+
+                if function_nodes.len() < 2 {
+                    return Err(ExpressionBuildError::InvalidFunctionDefinition("emtpy function definition".to_string()));
+                }
+
+                let params = function_nodes.remove(0);
+                let body = parse_expression_tree(function_nodes)?;
+
+                environment.user_functions.insert(name, (params, Node::Exp(body)));
+
+                Ok("new function".to_string())
+            },
             _ => Ok(String::new()),
         },
         None => Ok(String::new()),
     }
 }
 
-pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, ExpressionBuildError> {
-    let mut nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
+fn parse_expression_tree(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBuildError> {
     parse_square_braces(&mut nodes)?;
     nodes = parse_tree_braces(nodes)?;
     fill_missing_ans(&mut nodes);
-    println!("About to pass functions with {}", Node::Exp(nodes.clone()));
     parse_functions(&mut nodes);
-    println!("With functions parsed: {}", Node::Exp(nodes.clone()));
     parse_unary(&mut nodes);
     parse_binary(&mut nodes);
+    Ok(nodes)
+}
+
+pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, ExpressionBuildError> {
+    let mut nodes: Vec<Node> = token_sequence.iter().map(|token| Node::Tkn(token.clone())).collect();
+    nodes = parse_expression_tree(nodes)?;
     Ok(Node::Exp(nodes))
 }

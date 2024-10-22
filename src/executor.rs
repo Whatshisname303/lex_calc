@@ -13,7 +13,6 @@ pub enum ExecutionError {
     InvalidOperation(String),
     InvalidVectorContents(String),
     MatrixUnequalRowLengths,
-    InvalidFunctionDefinition(String),
     WrongNumFunctionArgs(usize, usize),
 }
 
@@ -26,7 +25,6 @@ impl fmt::Display for ExecutionError {
             ExecutionError::InvalidOperation(e) => write!(f, "invalid operation: {e}"),
             ExecutionError::InvalidVectorContents(e) => write!(f, "cannot contain '{e}' in vector"),
             ExecutionError::MatrixUnequalRowLengths => write!(f, "matrix row lengths are unequal"),
-            ExecutionError::InvalidFunctionDefinition(e) => write!(f, "invalid function definition: {e}"),
             ExecutionError::WrongNumFunctionArgs(a, b) => write!(f, "called function requiring {a} params with {b} args"),
         }
     }
@@ -89,7 +87,7 @@ pub enum TrigMode {
 #[derive(Clone)]
 pub struct Environment {
     pub user_vars: HashMap<String, MathType>,
-    pub user_functions: HashMap<String, Vec<Node>>, // need to define actual function type at some point
+    pub user_functions: HashMap<String, (Node, Node)>, // name to (params, body)
     pub trig_mode: TrigMode,
     pub digit_cap: u8,
 }
@@ -328,54 +326,39 @@ fn handle_matrix_creation(nodes: &Vec<Node>, environment: &mut Environment) -> R
     }
 }
 
-fn handle_function_declaration(nodes: &Vec<Node>, environment: &mut Environment) -> Result<(), ExecutionError> {
-    // first node is "def", second node should be name, third node params, fourth+ body
-    if nodes.len() < 4 {
-        return Err(ExecutionError::InvalidFunctionDefinition("function declaration not complete".to_string()));
-    }
-
-    let name = match &nodes[1].unrolled() {
-        Node::Tkn(token) => token.clone(),
-        Node::Exp(_) => return Err(ExecutionError::InvalidFunctionDefinition("invalid function name".to_string())),
-    };
-
-    let mut owned_nodes: Vec<Node> = Vec::new();
-    nodes[2..].clone_into(&mut owned_nodes);
-
-    environment.user_functions.insert(name, owned_nodes);
-    Ok(())
-}
-
-fn handle_user_function_call(function: &Vec<Node>, arguments: &Node, environment: &Environment) -> Result<MathType, ExecutionError> {
+fn handle_user_function_call(body: &Node, params: &Node, args: &Node, environment: &Environment) -> Result<MathType, ExecutionError> {
     let mut function_environment = environment.clone();
 
-    let params = match &function[0].unrolled() { // stored parameters
-        Node::Tkn(token) => vec![Ok(token)],
+    let params: Vec<String> = match params {
+        Node::Tkn(token) => vec![token.clone()],
         Node::Exp(subnodes) => subnodes.iter()
             .filter(|node| !node.is_str(","))
-            .map(|node| node.as_identifier().ok_or(ExecutionError::InvalidFunctionDefinition(format!("cannot use param {:?}", node))))
-            .collect(),
+            .filter_map(|node| node.as_identifier())
+            .map(|node| node.clone())
+            .collect()
     };
-    let arguments = match arguments {
-        Node::Tkn(_) => vec![execute_expression_tree(arguments, &mut function_environment)],
+
+    // should think about requiring commas which would allow passing expressions to functions
+    // which would allow function calls to be passed as arguments to other functions and would make
+    // general user experience probably nicer
+
+    let args = match args {
+        Node::Tkn(_) => vec![execute_expression_tree(args, &mut function_environment)],
         Node::Exp(subnodes) => subnodes.iter()
             .filter(|node| !node.is_str(","))
             .map(|node| execute_expression_tree(node, &mut function_environment))
             .collect()
     };
 
-    if params.len() != arguments.len() {
-        return Err(ExecutionError::WrongNumFunctionArgs(params.len(), arguments.len()));
+    if params.len() != args.len() {
+        return Err(ExecutionError::WrongNumFunctionArgs(params.len(), args.len()));
     }
 
-    for (param, arg) in iter::zip(params, arguments) {
-        function_environment.user_vars.insert(param?.clone(), arg?);
+    for (param, arg) in iter::zip(params, args) {
+        function_environment.user_vars.insert(param, arg?);
     }
 
-    let mut cloned_body = Vec::new();
-    function[1..].clone_into(&mut cloned_body);
-
-    execute_expression_tree(&Node::Exp(cloned_body), &mut function_environment)
+    execute_expression_tree(body, &mut function_environment)
 }
 
 fn handle_builtin_function_call(function_name: &String, arguments: &Node) -> Result<MathType, ExecutionError> {
@@ -397,11 +380,6 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
             if let Some(first) = subnodes.get(0) {
                 if first.is_str("[") {
                     return handle_matrix_creation(subnodes, environment);
-
-                } else if first.is_str("def") {
-                    handle_function_declaration(subnodes, environment)?;
-                    return Ok(MathType::Number(0.0));
-
                 }
             }
 
@@ -416,8 +394,8 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
                         execute_expression_tree(right_node, environment)?.operate("*", MathType::Number(-1.0))
 
                     } else if let Node::Tkn(token) = left_node { // expecting function call
-                        if let Some(func) = environment.user_functions.get(token) {
-                            handle_user_function_call(func, right_node, environment) // right node will be argument expression (...)
+                        if let Some((params, body)) = environment.user_functions.get(token) {
+                            handle_user_function_call(body, params, right_node, environment) // right node will be argument expression (...)
 
                         } else if let Some(func) = environment.user_functions.get(token) {
                             // todo: swap out the condition to match builtin functions; implement
