@@ -31,7 +31,7 @@ impl fmt::Display for ExpressionBuildError {
 
 impl Error for ExpressionBuildError {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Tkn(Token),
     Exp(Vec<Node>),
@@ -55,10 +55,10 @@ impl Node {
             Node::Tkn(token) => BINARY_OPERATOR_PRIORITY.iter().any(|prio| prio.contains(&token.as_str())),
         }
     }
-    pub fn is_char(&self, c: char) -> bool {
+    pub fn is_str(&self, s: &str) -> bool {
         match self {
             Node::Exp(_) => false,
-            Node::Tkn(token) => token == &c.to_string(),
+            Node::Tkn(token) => token == s,
         }
     }
     // other is_..._operator functions should also return option rather than bool, but idc rn
@@ -75,6 +75,15 @@ impl Node {
         match self {
             Node::Exp(_) => None,
             Node::Tkn(token) => Some(token),
+        }
+    }
+    pub fn unrolled(&self) -> &Node {
+        match self {
+            Node::Exp(subnodes) => match subnodes.len() {
+                1 => subnodes[0].unrolled(),
+                _ => self,
+            },
+            Node::Tkn(_) => self
         }
     }
     pub fn flat_string(&self) -> String {
@@ -122,14 +131,14 @@ impl fmt::Display for Node {
 fn parse_square_braces(nodes: &mut Vec<Node>) -> Result<(), ExpressionBuildError> {
     let mut i = 0;
     while i < nodes.len() {
-        if nodes[i].is_char('[') {
+        if nodes[i].is_str("[") {
             let mut j = i;
             loop {
                 j += 1;
                 if j >= nodes.len() {
                     return Err(ExpressionBuildError::HangingBrace("]".to_string()));
                 }
-                if nodes[j].is_char(']') {
+                if nodes[j].is_str("]") {
                     break;
                 }
             };
@@ -188,10 +197,11 @@ fn fill_missing_ans(nodes: &mut Vec<Node>) {
 fn parse_functions(nodes: &mut Vec<Node>) {
     let mut i = 1;
     while (i as isize) < (nodes.len() as isize) - 1 {
-        let current = &nodes[i];
-        let next = &nodes[i + 1];
+        let current = &nodes[i].unrolled();
+        let next = &nodes[i + 1].unrolled();
         if !current.is_operator() && !next.is_operator() {
-            let mut function_nodes: Vec<Node> = nodes.drain(i..i+1).collect();
+            println!("Found function to eval");
+            let mut function_nodes: Vec<Node> = nodes.drain(i..=i+1).collect();
             parse_functions(&mut function_nodes);
             nodes.insert(i, Node::Exp(function_nodes));
         }
@@ -275,8 +285,12 @@ pub fn parse_commands(token_sequence: &mut Vec<Token>, environment: &mut Environ
                     let vars: String = environment.user_vars
                         .iter()
                         .map(|(name, value)| format!("{:?} = {:?}\n", name, value))
-                        .collect(); // todo: chain user functions if they don't end up merged into vars
-                    Ok(format!("display digits: {}\ntrig mode: {:?}\nvars:\n{}", environment.digit_cap, environment.trig_mode, vars))
+                        .collect();
+                    let functions: String = environment.user_functions
+                        .iter()
+                        .map(|(name, nodes)| format!("function {} = {}\n", name, Node::Exp(nodes.clone()).flat_string()))
+                        .collect();
+                    Ok(format!("display digits: {}\ntrig mode: {:?}\nvars:\n{}\nfunctions:\n{}", environment.digit_cap, environment.trig_mode, vars, functions))
                 }
             },
             "clearvars" => {
@@ -300,7 +314,9 @@ pub fn build_expression_tree(token_sequence: Vec<Token>) -> Result<Node, Express
     parse_square_braces(&mut nodes)?;
     nodes = parse_tree_braces(nodes)?;
     fill_missing_ans(&mut nodes);
+    println!("About to pass functions with {}", Node::Exp(nodes.clone()));
     parse_functions(&mut nodes);
+    println!("With functions parsed: {}", Node::Exp(nodes.clone()));
     parse_unary(&mut nodes);
     parse_binary(&mut nodes);
     Ok(Node::Exp(nodes))

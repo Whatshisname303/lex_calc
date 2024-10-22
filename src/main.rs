@@ -21,12 +21,13 @@ fn execute_line(line: &mut String, environment: &mut executor::Environment) -> R
     let expression_tree = tree_builder::build_expression_tree(tokens);
     match expression_tree {
         Ok(nodes) => {
+            // println!("{}", nodes);
             match executor::execute_expression_tree(&nodes, environment) {
                 Ok(value) => {
                     println!("{}\n", value);
                     environment.user_vars.insert("ans".to_string(), value);
                 },
-                Err(e) => println!("{:?}", e),
+                Err(e) => println!("{}", e),
             }
         },
         Err(e) => println!("{:?}", e),
