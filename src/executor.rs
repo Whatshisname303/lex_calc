@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::f64::consts;
 use std::{fmt, iter};
 
@@ -13,6 +14,21 @@ pub enum ExecutionError {
     InvalidVectorContents(String),
     MatrixUnequalRowLengths,
 }
+
+impl fmt::Display for ExecutionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecutionError::UnknownOperator(e) => write!(f, "operator '{e}' does not exist"),
+            ExecutionError::UnknownExpression(e) => write!(f, "could not parse expression: {e}"),
+            ExecutionError::UnknownIdentifier(e) => write!(f, "unknown identifier: {e}"),
+            ExecutionError::InvalidOperation(e) => write!(f, "invalid operation: {e}"),
+            ExecutionError::InvalidVectorContents(e) => write!(f, "cannot contain '{e}' in vector"),
+            ExecutionError::MatrixUnequalRowLengths => write!(f, "matrix row lengths are unequal"),
+        }
+    }
+}
+
+impl Error for ExecutionError {}
 
 pub type Number = f64;
 

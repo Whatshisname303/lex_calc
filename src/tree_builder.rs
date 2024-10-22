@@ -14,12 +14,10 @@ const BINARY_OPERATOR_PRIORITY: &'static [&'static [&'static str]] = &[
     &["=>", "="],
 ];
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum ExpressionBuildError {
     HangingBrace(String),
     InvalidMode(String),
-    FloatingOperator(String),
 }
 
 impl fmt::Display for ExpressionBuildError {
@@ -27,7 +25,6 @@ impl fmt::Display for ExpressionBuildError {
         match self {
             ExpressionBuildError::HangingBrace(e) => write!(f, "missing closing {}", e),
             ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
-            ExpressionBuildError::FloatingOperator(e) => write!(f, "floating operator '{e}'"),
         }
     }
 }
