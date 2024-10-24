@@ -338,15 +338,11 @@ fn handle_user_function_call(body: &Node, params: &Node, args: &Node, environmen
             .collect()
     };
 
-    // should think about requiring commas which would allow passing expressions to functions
-    // which would allow function calls to be passed as arguments to other functions and would make
-    // general user experience probably nicer
-
     let args = match args {
         Node::Tkn(_) => vec![execute_expression_tree(args, &mut function_environment)],
-        Node::Exp(subnodes) => subnodes.iter()
-            .filter(|node| !node.is_str(","))
-            .map(|node| execute_expression_tree(node, &mut function_environment))
+        Node::Exp(subnodes) => subnodes
+            .split(|e| e.is_str(","))
+            .map(|nodes| execute_expression_tree(&Node::Exp(nodes.to_vec()), &mut function_environment))
             .collect()
     };
 
