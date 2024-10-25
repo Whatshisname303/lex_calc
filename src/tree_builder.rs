@@ -19,6 +19,7 @@ pub enum ExpressionBuildError {
     HangingBrace(String),
     InvalidMode(String),
     InvalidFunctionDefinition(String),
+    HangingOperator(String),
 }
 
 impl fmt::Display for ExpressionBuildError {
@@ -27,6 +28,7 @@ impl fmt::Display for ExpressionBuildError {
             ExpressionBuildError::HangingBrace(e) => write!(f, "missing closing {}", e),
             ExpressionBuildError::InvalidMode(e) => write!(f, "mode update error: {e}"),
             ExpressionBuildError::InvalidFunctionDefinition(e) => write!(f, "invalid function definition: {e}"),
+            ExpressionBuildError::HangingOperator(e) => write!(f, "not enough arguments for operator '{e}'"),
         }
     }
 }
@@ -213,7 +215,7 @@ fn parse_functions(nodes: &mut Vec<Node>) {
 
 fn parse_unary(nodes: &mut Vec<Node>) {
     let mut i = 0;
-    while (i as isize) < (nodes.len() as isize) - 1 {
+    while i < nodes.len() {
         match nodes[i] {
             Node::Tkn(_) => {
                 if nodes[i].is_unary_operator() && (i == 0 || nodes[i - 1].is_operator()) {
@@ -229,17 +231,34 @@ fn parse_unary(nodes: &mut Vec<Node>) {
     }
 }
 
-fn parse_binary(nodes: &mut Vec<Node>) {
+// don't feel great about this code, should have a look later
+fn parse_binary(nodes: &mut Vec<Node>) -> Result<(), ExpressionBuildError> {
     for ops in BINARY_OPERATOR_PRIORITY {
-        let mut i = 1;
-        while (i as isize) < (nodes.len() as isize) - 1 {
+        let mut i = 0;
+        while i < nodes.len() {
+            let len = nodes.len();
+            if len == 3 {
+                return Ok(())
+            }
             match nodes[i] {
                 Node::Exp(ref mut subnodes) => {
-                    parse_binary(subnodes);
+                    if len == 3 {
+                        return Ok(());
+                    }
+                    parse_binary(subnodes)?;
                 },
                 Node::Tkn(ref token) => {
                     if ops.contains(&token.as_str()) {
-                        let binary_nodes: Vec<Node> = nodes.drain(i-1..=i+1).collect();
+                        if i == 0 || i == len - 1 {
+                            return Err(ExpressionBuildError::HangingOperator(token.clone()));
+                        }
+                        let mut binary_nodes: Vec<Node> = nodes.drain(i-1..=i+1).collect();
+                        if let Node::Exp(ref mut subnodes) = binary_nodes[0] {
+                            parse_binary(subnodes)?
+                        }
+                        if let Node::Exp(ref mut subnodes) = binary_nodes[2] {
+                            parse_binary(subnodes)?
+                        }
                         nodes.insert(i - 1, Node::Exp(binary_nodes));
                     }
                 }
@@ -247,6 +266,7 @@ fn parse_binary(nodes: &mut Vec<Node>) {
             i += 1;
         }
     }
+    Ok(())
 }
 
 // todo: allow temporary mode updates if tokens continue past mode update
@@ -338,7 +358,7 @@ fn parse_expression_tree(mut nodes: Vec<Node>) -> Result<Vec<Node>, ExpressionBu
     fill_missing_ans(&mut nodes);
     parse_functions(&mut nodes);
     parse_unary(&mut nodes);
-    parse_binary(&mut nodes);
+    parse_binary(&mut nodes)?;
     Ok(nodes)
 }
 
