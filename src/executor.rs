@@ -3,6 +3,7 @@ use std::error::Error;
 use std::f64::consts;
 use std::{fmt, iter};
 
+use crate::operations;
 use crate::tree_builder::Node;
 
 #[derive(Debug)]
@@ -14,6 +15,7 @@ pub enum ExecutionError {
     InvalidVectorContents(String),
     MatrixUnequalRowLengths,
     WrongNumFunctionArgs(usize, usize),
+    BadFunctionArgs(String),
 }
 
 impl fmt::Display for ExecutionError {
@@ -26,6 +28,7 @@ impl fmt::Display for ExecutionError {
             ExecutionError::InvalidVectorContents(e) => write!(f, "cannot contain '{e}' in vector"),
             ExecutionError::MatrixUnequalRowLengths => write!(f, "matrix row lengths are unequal"),
             ExecutionError::WrongNumFunctionArgs(a, b) => write!(f, "called function requiring {a} params with {b} args"),
+            ExecutionError::BadFunctionArgs(e) => write!(f, "bad arguments for {}", e),
         }
     }
 }
@@ -157,9 +160,17 @@ fn handle_matrix_creation(nodes: &Vec<Node>, environment: &mut Environment) -> R
     }
 }
 
-fn handle_user_function_call(body: &Node, params: &Node, args: &Node, environment: &Environment) -> Result<MathType, ExecutionError> {
-    let mut function_environment = environment.clone();
+fn process_function_args(args: &Node, environment: &mut Environment) -> Result<Vec<MathType>, ExecutionError> {
+    match args {
+        Node::Tkn(_) => Ok(vec![execute_expression_tree(args, environment)?]),
+        Node::Exp(subnodes) => subnodes
+            .split(|e| e.is_str(","))
+            .map(|nodes| execute_expression_tree(&Node::Exp(nodes.to_vec()), environment))
+            .collect()
+    }
+}
 
+fn handle_user_function_call(body: &Node, params: &Node, args: Vec<MathType>, mut environment: Environment) -> Result<MathType, ExecutionError> {
     let params: Vec<String> = match params {
         Node::Tkn(token) => vec![token.clone()],
         Node::Exp(subnodes) => subnodes.iter()
@@ -169,27 +180,15 @@ fn handle_user_function_call(body: &Node, params: &Node, args: &Node, environmen
             .collect()
     };
 
-    let args = match args {
-        Node::Tkn(_) => vec![execute_expression_tree(args, &mut function_environment)],
-        Node::Exp(subnodes) => subnodes
-            .split(|e| e.is_str(","))
-            .map(|nodes| execute_expression_tree(&Node::Exp(nodes.to_vec()), &mut function_environment))
-            .collect()
-    };
-
     if params.len() != args.len() {
         return Err(ExecutionError::WrongNumFunctionArgs(params.len(), args.len()));
     }
 
     for (param, arg) in iter::zip(params, args) {
-        function_environment.user_vars.insert(param, arg?);
+        environment.user_vars.insert(param, arg);
     }
 
-    execute_expression_tree(body, &mut function_environment)
-}
-
-fn handle_builtin_function_call(function_name: &String, arguments: &Node) -> Result<MathType, ExecutionError> {
-    todo!() // todo: implement
+    execute_expression_tree(body, &mut environment)
 }
 
 pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) -> Result<MathType, ExecutionError> {
@@ -221,14 +220,11 @@ pub fn execute_expression_tree(root_node: &Node, environment: &mut Environment) 
                         execute_expression_tree(right_node, environment)?.operate("*", MathType::Number(-1.0))
 
                     } else if let Node::Tkn(token) = left_node { // expecting function call
-                        if let Some((params, body)) = environment.user_functions.get(token) {
-                            handle_user_function_call(body, params, right_node, environment) // right node will be argument expression (...)
-
-                        } else if let Some(func) = environment.user_functions.get(token) {
-                            // todo: swap out the condition to match builtin functions; implement
-                            todo!()
-                        } else {
-                            Err(ExecutionError::UnknownIdentifier(token.clone()))
+                        let mut function_env = environment.clone();
+                        let function_args = process_function_args(right_node, &mut function_env)?;
+                        match environment.user_functions.get(token) {
+                            Some((params, body)) => handle_user_function_call(body, params, function_args, function_env),
+                            None => operations::execute_builtin_function(token, function_args)
                         }
                     } else {
                         Err(ExecutionError::UnknownExpression(format!("left: {}; right: {};", left_node.flat_string(), right_node.flat_string())))

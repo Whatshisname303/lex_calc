@@ -2,6 +2,47 @@ use std::iter;
 
 use crate::executor::{MathType, ExecutionError};
 
+pub fn execute_builtin_function(fname: &str, args: Vec<MathType>) -> Result<MathType, ExecutionError> {
+    match fname {
+        "sin" => match args.get(0) {
+            Some(MathType::Number(num)) => Ok(MathType::Number(num.sin())),
+            _ => Err(ExecutionError::BadFunctionArgs("sin".to_string()))
+        }
+        "cos" => match args.get(0) {
+            Some(MathType::Number(num)) => Ok(MathType::Number(num.cos())),
+            _ => Err(ExecutionError::BadFunctionArgs("cos".to_string()))
+        },
+        "tan" => match args.get(0) {
+            Some(MathType::Number(num)) => Ok(MathType::Number(num.tan())),
+            _ => Err(ExecutionError::BadFunctionArgs("cos".to_string()))
+        },
+        "ln" => match args.get(0) {
+            Some(MathType::Number(num)) => Ok(MathType::Number(num.ln())),
+            _ => Err(ExecutionError::BadFunctionArgs("ln".to_string())),
+        },
+        "dot" => match (args.get(0), args.get(1)) {
+            (Some(MathType::Vector(vec1)), Some(MathType::Vector(vec2))) => match vec1.len() == vec2.len() {
+                true => Ok(MathType::Number(iter::zip(vec1, vec2).map(|(num1, num2)| num1 * num2).sum())),
+                false => Err(ExecutionError::BadFunctionArgs("dot with unequal vector lengths".to_string())),
+            },
+            _ => Err(ExecutionError::BadFunctionArgs("dot".to_string()))
+        },
+        "cross" => match(args.get(0), args.get(1)) {
+            (Some(MathType::Vector(vec1)), Some(MathType::Vector(vec2))) => match vec1.len() == 3 && vec2.len() == 3 {
+                true => todo!(),
+                false => Err(ExecutionError::BadFunctionArgs("cross with invalid vector lengths".to_string())),
+            },
+            _ => Err(ExecutionError::BadFunctionArgs("cross".to_string())),
+        },
+        "rref" => todo!(),
+        "inv" => todo!(),
+        "det" => todo!(),
+        "mean" => todo!(),
+        "median" => todo!(),
+        _ => Err(ExecutionError::UnknownIdentifier(fname.to_string())),
+    }
+}
+
 impl MathType {
     pub fn operate(&self, operator: &str, rhs: MathType) -> Result<MathType, ExecutionError> {
         match operator {
