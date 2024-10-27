@@ -5,6 +5,7 @@ use std::process;
 mod tokens;
 mod tree_builder;
 mod executor;
+mod operations;
 
 fn execute_line(line: &mut String, environment: &mut executor::Environment) -> Result<(), Box<dyn Error>> {
     get_input(line)?;
